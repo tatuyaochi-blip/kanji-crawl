@@ -46,8 +46,8 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .logo span { color: var(--accent); }
 .tag { margin: 10px 0 22px; color: var(--muted); }
 .big-kanji { font-size: 5.5rem; line-height: 1; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
-.course { display: inline-flex; gap: 6px; margin: 0 0 16px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
-.course button { min-height: 44px; min-width: 76px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.course { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 0 0 16px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.course button { min-height: 44px; min-width: 60px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
 .course button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 .course small { display: block; font-weight: 400; font-size: .7rem; opacity: .85; }
 .upsell { font-size: .85rem; margin-top: 16px; text-align: left; }
@@ -151,7 +151,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       <p class="muted">Keys: 1–4 to answer, H for a hint.</p>
     </div>
     <p class="panel upsell" id="upsell" hidden><b>Full version in the works:</b> JLPT N4 to N1 (2,000+ kanji), more yokai and relics. This free N5 edition stays free.</p>
-    <p class="credit">Kanji data from <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener">KANJIDIC2</a> by the <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">Electronic Dictionary Research and Development Group</a>, used under CC BY-SA 4.0. Sets follow common JLPT study lists (there is no official kanji list since 2010).</p>
+    <p class="credit">Kanji data from <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener">KANJIDIC2</a> by the <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">Electronic Dictionary Research and Development Group</a>, used under CC BY-SA 4.0. Level sets follow the community JLPT lists by Jonathan Waller (tanos.co.uk); there is no official kanji list since 2010.</p>
   </section>
 
   <!-- 戦闘 -->
@@ -314,7 +314,14 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     const show = mode === 'reverse' ? meaning(e) : e.k;
     const ans = mode === 'meaning' ? meaning(e) : mode === 'reading' ? reading(e) : e.k;
     const label = (x) => (mode === 'meaning' ? meaning(x) : mode === 'reading' ? reading(x) : x.k);
-    const others = shuffle(r, g.pool.filter((x) => x.k !== e.k && label(x) !== ans)).slice(0, 3).map(label);
+    // 同じ表記の選択肢や、逆引きで意味が同じ別の字（N1 の「plum」など）は出さない
+    const used = new Set([ans]), others = [];
+    for (const x of shuffle(r, g.pool.filter((x) => x.k !== e.k))) {
+      const l = label(x);
+      if (used.has(l) || (mode === 'reverse' && meaning(x) === show)) continue;
+      used.add(l); others.push(l);
+      if (others.length === 3) break;
+    }
     const options = shuffle(r, [ans, ...others]);
     return { kanji: e, mode, prompt: show, options, answer: options.indexOf(ans), removed: [] };
   }
