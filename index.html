@@ -69,6 +69,11 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .enemy .icon { font-size: 3.2rem; line-height: 1.1; display: inline-block; }
 .enemy .name { font-weight: 800; }
 .enemy.boss .name { color: var(--accent); }
+.intent { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 999px; font-size: .8rem; background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
+.intent b { color: var(--ink); }
+.intent[data-intent="charge"] { border-color: var(--bad); }
+.intent[data-intent="charge"] b { color: var(--bad); }
+.intent[data-intent="guard"] { border-color: var(--focus); }
 .shake { animation: shake .3s; }
 @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
 .flash { animation: flash .35s; }
@@ -145,6 +150,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       <ol>
         <li>A yokai appears with a kanji. Pick the right answer to attack. Answer fast for a critical hit.</li>
         <li>Wrong answers or running out of time let the enemy hit you. The correct answer is shown so you learn it.</li>
+        <li>Watch the enemy's next move: 💥 Charging hits harder if you miss but staggers if you answer; 🛡️ Guarding halves damage unless you answer fast.</li>
         <li>After each fight, choose one of three relics. Each floor ends with a boss built from your weakest kanji.</li>
         <li>Your progress on every kanji is saved between runs. Floor 2 adds readings, floor 3 asks you to find the kanji from its meaning.</li>
       </ol>
@@ -166,6 +172,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       <div class="icon" id="enIcon">👹</div>
       <div class="name" id="enName">Oni</div>
       <div class="bar ehp" style="max-width:260px;margin:4px auto 0"><i id="barEhp"></i></div>
+      <div class="intent" id="intent" data-intent="attack"><b id="inLabel">⚔️ Attack</b> <span id="inDesc">A miss takes a normal hit.</span></div>
     </div>
     <div class="panel qcard" id="qcard">
       <div class="qlabel" id="qLabel">Meaning?</div>
@@ -247,18 +254,25 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   const FAST = 3000; // これより速いと会心
 
   const ENEMIES = [
-    { name: 'Kappa', icon: '🐢', hp: 32, atk: 12 },
-    { name: 'Tanuki', icon: '🦝', hp: 36, atk: 13 },
-    { name: 'Kitsune', icon: '🦊', hp: 40, atk: 14 },
-    { name: 'Tengu', icon: '👺', hp: 44, atk: 15 },
-    { name: 'Yurei', icon: '👻', hp: 42, atk: 17 },
-    { name: 'Oni', icon: '👹', hp: 50, atk: 18 },
+    { name: 'Kappa', icon: '🐢', hp: 32, atk: 12, moves: ['attack', 'guard'] },
+    { name: 'Tanuki', icon: '🦝', hp: 36, atk: 13, moves: ['attack', 'attack', 'charge'] },
+    { name: 'Kitsune', icon: '🦊', hp: 40, atk: 14, moves: ['guard', 'attack', 'charge'] },
+    { name: 'Tengu', icon: '👺', hp: 44, atk: 15, moves: ['charge', 'attack'] },
+    { name: 'Yurei', icon: '👻', hp: 42, atk: 17, moves: ['attack', 'guard', 'charge'] },
+    { name: 'Oni', icon: '👹', hp: 50, atk: 18, moves: ['attack', 'charge', 'attack'] },
   ];
   const BOSSES = [
-    { name: 'Stone Golem of Strokes', icon: '🗿', hp: 100, atk: 18 },
-    { name: 'Daruma of Doubt', icon: '🎎', hp: 140, atk: 22 },
-    { name: 'Dragon of the Lost Readings', icon: '🐉', hp: 190, atk: 26 },
+    { name: 'Stone Golem of Strokes', icon: '🗿', hp: 100, atk: 18, moves: ['attack', 'guard', 'attack', 'charge'] },
+    { name: 'Daruma of Doubt', icon: '🎎', hp: 140, atk: 22, moves: ['guard', 'attack', 'charge', 'attack'] },
+    { name: 'Dragon of the Lost Readings', icon: '🐉', hp: 190, atk: 26, moves: ['attack', 'charge', 'guard', 'charge'] },
   ];
+
+  // 敵の次の行動（毎問の前に画面に出す）。charge: 外すと1.5倍の被弾、当てると怯んで+50%。guard: 会心以外は半減
+  const INTENTS = {
+    attack: { icon: '⚔️', label: 'Attack', desc: 'A miss takes a normal hit.' },
+    charge: { icon: '💥', label: 'Charging', desc: 'Miss: you take +50%. Hit: +50% damage.' },
+    guard: { icon: '🛡️', label: 'Guarding', desc: 'Only fast (critical) answers break through.' },
+  };
 
   // 報酬（遺物）。apply はランの状態を書き換える
   const RELICS = {
@@ -344,7 +358,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   function spawn(g) {
     const scale = 1 + (g.floor - 1) * 0.35;
     const base = isBoss(g) ? BOSSES[g.floor - 1] : pick(g.r, ENEMIES);
-    g.enemy = { name: base.name, icon: base.icon, boss: isBoss(g), maxHp: Math.round(base.hp * scale), hp: Math.round(base.hp * scale), atk: Math.round(base.atk * (isBoss(g) ? 1 : scale)) };
+    g.enemy = { name: base.name, icon: base.icon, boss: isBoss(g), maxHp: Math.round(base.hp * scale), hp: Math.round(base.hp * scale), atk: Math.round(base.atk * (isBoss(g) ? 1 : scale)), moves: base.moves, turn: 0, intent: base.moves[0] };
     g.keeperUsed = false;
     g.bossQueue = isBoss(g) ? weakest(g.pool, g.mastery, 8).map((e) => e.k) : null;
     nextQuestion(g);
@@ -378,6 +392,9 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
       if (q.mode === 'reading' && g.flags.scholar) dmg = Math.round(dmg * 1.6);
       const crit = elapsedMs <= FAST;
       if (crit) { dmg = Math.round(dmg * 1.5); g.stats.crits++; }
+      const intent = g.enemy.intent;
+      if (intent === 'charge') { dmg = Math.round(dmg * 1.5); res.stagger = true; }
+      if (intent === 'guard' && !crit) { dmg = Math.round(dmg * 0.5); res.guarded = true; }
       g.enemy.hp = Math.max(0, g.enemy.hp - dmg);
       if (g.flags.vampire) g.hp = Math.min(g.maxHp, g.hp + 3);
       Object.assign(res, { dmg, crit });
@@ -386,6 +403,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
       g.stats.missed.set(q.kanji.k, q.kanji);
       if (g.flags.keeper && !g.keeperUsed) g.keeperUsed = true; else g.combo = 0;
       let hit = g.enemy.atk;
+      if (g.enemy.intent === 'charge') { hit = Math.round(hit * 1.5); res.charged = true; }
       if (g.flags.shield) hit = Math.round(hit * 0.65);
       g.hp = Math.max(0, g.hp - hit);
       Object.assign(res, { taken: hit, timeout: choice === -1 });
@@ -406,6 +424,8 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
       }
       return res;
     }
+    g.enemy.turn++;
+    g.enemy.intent = g.enemy.moves[g.enemy.turn % g.enemy.moves.length];
     nextQuestion(g);
     return res;
   }
@@ -441,7 +461,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   }
   function masteredCount(pool, store) { return pool.filter((e) => masteryOf(store, e.k).box >= 3).length; }
 
-  const api = { rng, FLOORS, BATTLES_PER_FLOOR, BASE_TIME, FAST, ENEMIES, BOSSES, RELICS, masteryOf, bump, weakest, reading, meaning, newRun, answer, chooseReward, useHint, summary, masteredCount, isBoss };
+  const api = { rng, FLOORS, BATTLES_PER_FLOOR, BASE_TIME, FAST, ENEMIES, BOSSES, RELICS, INTENTS, masteryOf, bump, weakest, reading, meaning, newRun, answer, chooseReward, useHint, summary, masteredCount, isBoss };
   root.KanjiCrawl = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -507,6 +527,10 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     $('enIcon').textContent = e.icon;
     $('enName').textContent = e.name;
     $('barEhp').style.width = `${(e.hp / e.maxHp) * 100}%`;
+    const it = G.INTENTS[e.intent];
+    $('intent').dataset.intent = e.intent;
+    $('inLabel').textContent = `${it.icon} ${it.label}`;
+    $('inDesc').textContent = it.desc;
     $('combo').textContent = g.combo;
     $('hints').textContent = g.hints;
     $('btnHint').disabled = g.hints <= 0;
@@ -555,11 +579,12 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     const k = q.kanji;
     const info = `<span lang="ja" style="font-size:1.3rem">${esc(k.k)}</span> ${esc(G.reading(k))} — ${esc(G.meaning(k))}`;
     if (res.ok) {
-      $('feedback').innerHTML = `<span class="ok">${res.crit ? 'CRITICAL! ' : ''}-${res.dmg}</span> · ${info}`;
+      const tag = res.stagger ? 'STAGGER! ' : res.guarded ? 'Guarded. ' : res.crit ? 'CRITICAL! ' : '';
+      $('feedback').innerHTML = `<span class="ok">${tag}-${res.dmg}</span> · ${info}`;
       floatText(`-${res.dmg}`, res.crit ? 'crit' : 'dmg');
       retrigger($('enIcon'), 'shake');
     } else {
-      $('feedback').innerHTML = `<span class="ng">${res.timeout ? 'Too slow!' : 'Miss!'} You took ${res.taken}</span><br>${info}`;
+      $('feedback').innerHTML = `<span class="ng">${res.timeout ? 'Too slow!' : 'Miss!'} ${res.charged ? 'Heavy hit: ' : 'You took '}${res.taken}</span><br>${info}`;
       retrigger(document.body, 'flash');
     }
     store.set('kc-mastery', mastery);
