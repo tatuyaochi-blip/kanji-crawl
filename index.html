@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kanji Crawl</title>
+<meta name="description" content="A roguelite where every attack is a kanji. Fight yokai, pick relics, and beat bosses made of the kanji you keep missing. JLPT N5, free in your browser.">
+<meta property="og:title" content="Kanji Crawl: a kanji roguelite">
+<meta property="og:description" content="Every attack is a kanji. Fight yokai, pick relics, and beat bosses built from the kanji you keep missing. Free JLPT N5 browser game.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#b3261e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23b3261e'/%3E%3Ctext x='50' y='74' font-size='64' text-anchor='middle' fill='white'%3E%E6%BC%A2%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f3efe6; --panel: #fffaf0; --ink: #1d1a16; --muted: #6d665b; --line: #ddd3c2;
+  --accent: #b3261e; --accent-ink: #fff; --good: #2e7d4f; --bad: #b3261e; --gold: #b7791f; --hp: #2e7d4f; --ehp: #b3261e; --focus: #2563eb;
+  --opt: #fffdf8; --opt-hover: #f6efe1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12100e; --panel: #1d1a17; --ink: #efe9df; --muted: #a79f92; --line: #3a342d;
+    --accent: #e35d4f; --accent-ink: #12100e; --good: #5cc48a; --bad: #ef6b5f; --gold: #e2b04a; --hp: #5cc48a; --ehp: #ef6b5f; --focus: #8ab4ff;
+    --opt: #24201c; --opt-hover: #2d2823;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12100e; --panel: #1d1a17; --ink: #efe9df; --muted: #a79f92; --line: #3a342d;
+  --accent: #e35d4f; --accent-ink: #12100e; --good: #5cc48a; --bad: #ef6b5f; --gold: #e2b04a; --hp: #5cc48a; --ehp: #ef6b5f; --focus: #8ab4ff;
+  --opt: #24201c; --opt-hover: #2d2823;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 14px 16px 40px; min-height: 100vh; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn { min-height: 48px; padding: 10px 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 800; letter-spacing: .02em; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.muted { color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+[hidden] { display: none !important; }
+
+/* タイトル */
+.title { text-align: center; padding-top: 6vh; }
+.logo { font-size: 3.2rem; font-weight: 900; letter-spacing: .02em; line-height: 1; margin: 0; }
+.logo span { color: var(--accent); }
+.tag { margin: 10px 0 22px; color: var(--muted); }
+.big-kanji { font-size: 5.5rem; line-height: 1; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
+.stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+.stat b { display: block; font-size: 1.3rem; }
+.stat { font-size: .8rem; color: var(--muted); }
+.how { text-align: left; font-size: .92rem; }
+.how ol { padding-left: 1.2em; margin: 6px 0; }
+.credit { font-size: .75rem; color: var(--muted); margin-top: 20px; }
+.credit a { color: inherit; }
+
+/* 戦闘 */
+.hud { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: .85rem; }
+.bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 100%; transition: width .25s; }
+.bar.hp > i { background: var(--hp); } .bar.ehp > i { background: var(--ehp); }
+.bar.time { height: 6px; } .bar.time > i { background: var(--gold); transition: none; }
+.enemy { text-align: center; margin: 10px 0 4px; position: relative; }
+.enemy .icon { font-size: 3.2rem; line-height: 1.1; display: inline-block; }
+.enemy .name { font-weight: 800; }
+.enemy.boss .name { color: var(--accent); }
+.shake { animation: shake .3s; }
+@keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.flash { animation: flash .35s; }
+@keyframes flash { from { background: rgba(179, 38, 30, .25); } to { background: transparent; } }
+.float { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-weight: 900; font-size: 1.4rem; pointer-events: none; animation: up .8s ease-out forwards; }
+.float.crit { color: var(--gold); font-size: 1.8rem; }
+.float.dmg { color: var(--ehp); }
+@keyframes up { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -40px); } }
+.qcard { text-align: center; padding: 14px 10px 10px; margin: 8px 0 10px; }
+.qlabel { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.prompt { font-size: 4.6rem; line-height: 1.15; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; margin: 4px 0; min-height: 1.15em; }
+.prompt.text { font-size: 1.6rem; font-family: inherit; font-weight: 800; padding: 18px 0; }
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.opt { min-height: 64px; padding: 8px 10px; border-radius: 12px; border: 2px solid var(--line); background: var(--opt); font-weight: 700; font-size: 1rem; line-height: 1.25; position: relative; }
+.opt:hover:not(:disabled) { background: var(--opt-hover); }
+.opt.kanji { font-size: 2rem; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
+.opt .key { position: absolute; top: 4px; left: 8px; font-size: .7rem; color: var(--muted); font-family: system-ui; }
+.opt.right { border-color: var(--good); background: color-mix(in srgb, var(--good) 18%, var(--opt)); }
+.opt.wrong { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 15%, var(--opt)); }
+.opt.gone { visibility: hidden; }
+.opt:disabled { cursor: default; }
+.feedback { min-height: 52px; text-align: center; font-size: .92rem; margin-top: 8px; }
+.feedback .ok { color: var(--good); font-weight: 800; }
+.feedback .ng { color: var(--bad); font-weight: 800; }
+.tools { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: .85rem; }
+.combo { font-weight: 900; color: var(--gold); }
+.relics { font-size: 1.1rem; letter-spacing: .1em; min-height: 1.4em; }
+
+/* 報酬 */
+.choices { display: grid; gap: 10px; margin-top: 12px; }
+.choice { text-align: left; display: grid; grid-template-columns: 44px 1fr; gap: 2px 10px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); min-height: 64px; }
+.choice:hover { border-color: var(--accent); }
+.choice .ic { font-size: 1.8rem; grid-row: span 2; text-align: center; }
+.choice b { font-size: 1.05rem; }
+.choice small { color: var(--muted); }
+
+/* 結果・図鑑 */
+.result h2 { margin: 0 0 4px; font-size: 1.6rem; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 12px 0; }
+.kv div b { display: block; font-size: 1.2rem; }
+.kv div { font-size: .82rem; color: var(--muted); }
+.missed { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 8px 0 14px; }
+.missed div { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font-size: .8rem; display: grid; grid-template-columns: auto 1fr; gap: 0 8px; align-items: center; }
+.missed .k { font-size: 1.7rem; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; grid-row: span 2; }
+.grim { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin: 10px 0; }
+.gk { aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); font-size: 1.4rem; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; display: grid; place-items: center; padding: 0; }
+.gk[data-box="0"] { opacity: .45; }
+.gk[data-box="1"], .gk[data-box="2"] { border-color: var(--gold); }
+.gk[data-box="3"], .gk[data-box="4"] { border-color: var(--good); }
+.gk[data-box="5"] { background: var(--good); color: var(--accent-ink); border-color: var(--good); }
+.ginfo { min-height: 64px; font-size: .9rem; }
+.legend { font-size: .75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <!-- タイトル -->
+  <section id="scrTitle" class="title">
+    <div class="big-kanji" aria-hidden="true">漢</div>
+    <h1 class="logo">Kanji<span>Crawl</span></h1>
+    <p class="tag">Every attack is a kanji. Every boss is the kanji you keep missing.</p>
+    <button class="btn primary" id="btnStart" style="min-width:220px">Start a run</button>
+    <div class="stats3">
+      <div class="stat"><b id="stMastered">0/79</b>kanji mastered</div>
+      <div class="stat"><b id="stBest">0</b>best score</div>
+      <div class="stat"><b id="stRuns">0</b>runs</div>
+    </div>
+    <div class="row" style="justify-content:center">
+      <button class="btn" id="btnGrim">Kanji book</button>
+      <button class="btn" id="btnHow">How to play</button>
+    </div>
+    <div class="panel how" id="how" hidden style="margin-top:14px">
+      <ol>
+        <li>A yokai appears with a kanji. Pick the right answer to attack. Answer fast for a critical hit.</li>
+        <li>Wrong answers or running out of time let the enemy hit you. The correct answer is shown so you learn it.</li>
+        <li>After each fight, choose one of three relics. Each floor ends with a boss built from your weakest kanji.</li>
+        <li>Your progress on every kanji is saved between runs. Floor 2 adds readings, floor 3 asks you to find the kanji from its meaning.</li>
+      </ol>
+      <p class="muted">Keys: 1–4 to answer, H for a hint.</p>
+    </div>
+    <p class="credit">Kanji data from <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener">KANJIDIC2</a> by the <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">Electronic Dictionary Research and Development Group</a>, used under CC BY-SA 4.0. Set: JLPT N5 (there is no official kanji list since 2010; this follows common study lists).</p>
+  </section>
+
+  <!-- 戦闘 -->
+  <section id="scrBattle" hidden>
+    <div class="hud">
+      <div><b id="hudFloor">Floor 1</b> <span class="muted" id="hudRoom">Fight 1/3</span></div>
+      <div class="relics" id="hudRelics" aria-label="Relics"></div>
+      <div class="bar hp" aria-hidden="true"><i id="barHp"></i></div>
+      <div id="txtHp">100/100</div>
+    </div>
+    <div class="enemy" id="enemy">
+      <div class="icon" id="enIcon">👹</div>
+      <div class="name" id="enName">Oni</div>
+      <div class="bar ehp" style="max-width:260px;margin:4px auto 0"><i id="barEhp"></i></div>
+    </div>
+    <div class="panel qcard" id="qcard">
+      <div class="qlabel" id="qLabel">Meaning?</div>
+      <div class="prompt" id="qPrompt" lang="ja"></div>
+      <div class="bar time" aria-hidden="true"><i id="barTime"></i></div>
+    </div>
+    <div class="opts" id="opts"></div>
+    <div class="tools">
+      <span>Combo <span class="combo" id="combo">0</span></span>
+      <button class="btn" id="btnHint" style="min-height:40px;padding:6px 12px">🏮 Hint (<span id="hints">1</span>)</button>
+    </div>
+    <div class="feedback" id="feedback" aria-live="polite"></div>
+  </section>
+
+  <!-- 報酬 -->
+  <section id="scrReward" hidden>
+    <h2 style="margin:8px 0 0">Victory! Choose a relic</h2>
+    <p class="muted" id="rwSub" style="margin:4px 0 0"></p>
+    <div class="choices" id="choices"></div>
+  </section>
+
+  <!-- 結果 -->
+  <section id="scrEnd" class="result" hidden>
+    <h2 id="endTitle">Run over</h2>
+    <p class="muted" id="endSub"></p>
+    <div class="kv">
+      <div><b id="endScore">0</b>score</div>
+      <div><b id="endAcc">0%</b>accuracy</div>
+      <div><b id="endCombo">0</b>best combo</div>
+      <div><b id="endMastered">0</b>kanji mastered (all runs)</div>
+    </div>
+    <div id="endMissedWrap"><b>Review these</b><div class="missed" id="endMissed"></div></div>
+    <div class="row">
+      <button class="btn primary" id="btnAgain">Run again</button>
+      <button class="btn" id="btnHome">Title</button>
+    </div>
+  </section>
+
+  <!-- 図鑑 -->
+  <section id="scrGrim" hidden>
+    <div class="row" style="justify-content:space-between"><h2 style="margin:8px 0">Kanji book</h2><button class="btn" id="btnGrimBack">Back</button></div>
+    <p class="legend">Faded: not met yet · gold: learning · green: mastered (box 3+) · filled: perfect. Tap a kanji.</p>
+    <div class="grim" id="grim"></div>
+    <div class="panel ginfo" id="ginfo">Tap a kanji to see it.</div>
+    <p class="credit">Kanji data: <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener">KANJIDIC2</a> © EDRDG, <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">CC BY-SA 4.0</a>.</p>
+  </section>
+</main>
+<script>
+// 自動生成: tools/extract.js。データは KANJIDIC2（EDRDG, CC BY-SA 4.0）由来。編集しないこと。
+(function (root) {
+  const KANJI_SETS = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],"m":["day","sun","Japan"],"s":4,"f":1},{"k":"一","on":["イチ","イツ"],"kun":["ひと","ひと(つ)"],"m":["one"],"s":1,"f":2},{"k":"国","on":["コク"],"kun":["くに"],"m":["country"],"s":8,"f":3},{"k":"人","on":["ジン","ニン"],"kun":["ひと"],"m":["person"],"s":2,"f":5},{"k":"年","on":["ネン"],"kun":["とし"],"m":["year","counter for years"],"s":6,"f":6},{"k":"大","on":["ダイ","タイ"],"kun":["おお","おお(きい)"],"m":["large","big"],"s":3,"f":7},{"k":"十","on":["ジュウ","ジッ"],"kun":["とお","と"],"m":["ten"],"s":2,"f":8},{"k":"二","on":["ニ","ジ"],"kun":["ふた","ふた(つ)"],"m":["two"],"s":2,"f":9},{"k":"本","on":["ホン"],"kun":["もと"],"m":["book","present","main"],"s":5,"f":10},{"k":"中","on":["チュウ"],"kun":["なか","うち"],"m":["in","inside","middle"],"s":4,"f":11},{"k":"長","on":["チョウ"],"kun":["なが(い)","おさ"],"m":["long","leader","superior"],"s":8,"f":12},{"k":"出","on":["シュツ","スイ"],"kun":["で(る)","だ(す)"],"m":["exit","leave","go out"],"s":5,"f":13},{"k":"三","on":["サン","ゾウ"],"kun":["み","み(つ)"],"m":["three"],"s":3,"f":14},{"k":"時","on":["ジ"],"kun":["とき"],"m":["time","hour"],"s":10,"f":16},{"k":"行","on":["コウ","ギョウ"],"kun":["い(く)","ゆ(く)"],"m":["going","journey","carry out"],"s":6,"f":20},{"k":"見","on":["ケン"],"kun":["み(る)","み(える)"],"m":["see","hopes","chances"],"s":7,"f":22},{"k":"月","on":["ゲツ","ガツ"],"kun":["つき"],"m":["month","moon"],"s":4,"f":23},{"k":"後","on":["ゴ","コウ"],"kun":["のち","うし(ろ)"],"m":["behind","back","later"],"s":9,"f":26},{"k":"前","on":["ゼン"],"kun":["まえ"],"m":["in front","before"],"s":9,"f":27},{"k":"生","on":["セイ","ショウ"],"kun":["い(きる)","い(かす)"],"m":["life","genuine","birth"],"s":5,"f":29},{"k":"五","on":["ゴ"],"kun":["いつ","いつ(つ)"],"m":["five"],"s":4,"f":31},{"k":"間","on":["カン","ケン"],"kun":["あいだ","ま"],"m":["interval","space"],"s":12,"f":33},{"k":"上","on":["ジョウ","ショウ"],"kun":["うえ","うわ"],"m":["above","up"],"s":3,"f":35},{"k":"東","on":["トウ"],"kun":["ひがし"],"m":["east"],"s":8,"f":37},{"k":"四","on":["シ"],"kun":["よ","よ(つ)"],"m":["four"],"s":5,"f":47},{"k":"今","on":["コン","キン"],"kun":["いま"],"m":["now"],"s":4,"f":49},{"k":"金","on":["キン","コン"],"kun":["かね","かな"],"m":["gold"],"s":8,"f":53},{"k":"九","on":["キュウ","ク"],"kun":["ここの","ここの(つ)"],"m":["nine"],"s":2,"f":55},{"k":"入","on":["ニュウ","ジュ"],"kun":["い(る)","い(れる)"],"m":["enter","insert"],"s":2,"f":56},{"k":"学","on":["ガク"],"kun":["まな(ぶ)"],"m":["study","learning","science"],"s":8,"f":63},{"k":"高","on":["コウ"],"kun":["たか(い)","たか"],"m":["tall","high","expensive"],"s":10,"f":65},{"k":"円","on":["エン"],"kun":["まる(い)","まる"],"m":["circle","yen","round"],"s":4,"f":69},{"k":"子","on":["シ","ス"],"kun":["こ","ね"],"m":["child","sign of the rat","11PM-1AM"],"s":3,"f":72},{"k":"外","on":["ガイ","ゲ"],"kun":["そと","ほか"],"m":["outside"],"s":5,"f":81},{"k":"八","on":["ハチ","ハツ"],"kun":["や","や(つ)"],"m":["eight"],"s":2,"f":92},{"k":"六","on":["ロク","リク"],"kun":["む","む(つ)"],"m":["six"],"s":4,"f":93},{"k":"下","on":["カ","ゲ"],"kun":["した","しも"],"m":["below","down","descend"],"s":3,"f":97},{"k":"来","on":["ライ","タイ"],"kun":["く(る)","きた(る)"],"m":["come","due","next"],"s":7,"f":102},{"k":"気","on":["キ","ケ"],"kun":["き"],"m":["spirit","mind","air"],"s":6,"f":113},{"k":"小","on":["ショウ"],"kun":["ちい(さい)","こ"],"m":["little","small"],"s":3,"f":114},{"k":"七","on":["シチ"],"kun":["なな","なな(つ)"],"m":["seven"],"s":2,"f":115},{"k":"山","on":["サン","セン"],"kun":["やま"],"m":["mountain"],"s":3,"f":131},{"k":"話","on":["ワ"],"kun":["はな(す)","はなし"],"m":["tale","talk"],"s":13,"f":134},{"k":"女","on":["ジョ","ニョ"],"kun":["おんな","め"],"m":["woman","female"],"s":3,"f":151},{"k":"北","on":["ホク"],"kun":["きた"],"m":["north"],"s":5,"f":153},{"k":"午","on":["ゴ"],"kun":["うま"],"m":["noon","sign of the horse","11AM-1PM"],"s":4,"f":154},{"k":"百","on":["ヒャク","ビャク"],"kun":["もも"],"m":["hundred"],"s":6,"f":163},{"k":"書","on":["ショ"],"kun":["か(く)"],"m":["write"],"s":10,"f":169},{"k":"先","on":["セン"],"kun":["さき","ま(ず)"],"m":["before","ahead","previous"],"s":6,"f":173},{"k":"名","on":["メイ","ミョウ"],"kun":["な"],"m":["name","noted","distinguished"],"s":6,"f":177},{"k":"川","on":["セン"],"kun":["かわ"],"m":["stream","river"],"s":3,"f":181},{"k":"千","on":["セン"],"kun":["ち"],"m":["thousand"],"s":3,"f":195},{"k":"水","on":["スイ"],"kun":["みず","みず"],"m":["water"],"s":4,"f":223},{"k":"半","on":["ハン"],"kun":["なか(ば)"],"m":["half","middle","odd number"],"s":5,"f":224},{"k":"男","on":["ダン","ナン"],"kun":["おとこ","お"],"m":["male"],"s":7,"f":240},{"k":"西","on":["セイ","サイ"],"kun":["にし"],"m":["west","Spain"],"s":6,"f":259},{"k":"電","on":["デン"],"kun":[],"m":["electricity"],"s":13,"f":268},{"k":"校","on":["コウ","キョウ"],"kun":[],"m":["exam","school","printing"],"s":10,"f":294},{"k":"語","on":["ゴ"],"kun":["かた(る)","かた(らう)"],"m":["word","speech","language"],"s":14,"f":301},{"k":"土","on":["ド","ト"],"kun":["つち"],"m":["soil","earth","ground"],"s":3,"f":307},{"k":"木","on":["ボク","モク"],"kun":["き","こ"],"m":["tree","wood"],"s":4,"f":317},{"k":"聞","on":["ブン","モン"],"kun":["き(く)","き(こえる)"],"m":["hear","ask","listen"],"s":14,"f":319},{"k":"食","on":["ショク","ジキ"],"kun":["く(う)","く(らう)"],"m":["eat","food"],"s":9,"f":328},{"k":"車","on":["シャ"],"kun":["くるま"],"m":["car"],"s":7,"f":333},{"k":"何","on":["カ"],"kun":["なに","なん"],"m":["what"],"s":7,"f":340},{"k":"南","on":["ナン","ナ"],"kun":["みなみ"],"m":["south"],"s":9,"f":341},{"k":"万","on":["マン","バン"],"kun":["よろず"],"m":["ten thousand","10,000"],"s":3,"f":375},{"k":"毎","on":["マイ"],"kun":["ごと"],"m":["every"],"s":6,"f":436},{"k":"白","on":["ハク","ビャク"],"kun":["しろ","しら"],"m":["white"],"s":5,"f":483},{"k":"天","on":["テン"],"kun":["あまつ","あめ"],"m":["heavens","sky","imperial"],"s":4,"f":512},{"k":"母","on":["ボ"],"kun":["はは","も"],"m":["mother"],"s":5,"f":570},{"k":"火","on":["カ"],"kun":["ひ","ほ"],"m":["fire"],"s":4,"f":574},{"k":"右","on":["ウ","ユウ"],"kun":["みぎ"],"m":["right"],"s":5,"f":602},{"k":"読","on":["ドク","トク"],"kun":["よ(む)"],"m":["read"],"s":14,"f":618},{"k":"友","on":["ユウ"],"kun":["とも"],"m":["friend"],"s":4,"f":622},{"k":"左","on":["サ","シャ"],"kun":["ひだり"],"m":["left"],"s":5,"f":630},{"k":"休","on":["キュウ"],"kun":["やす(む)","やす(まる)"],"m":["rest","day off","retire"],"s":6,"f":642},{"k":"父","on":["フ"],"kun":["ちち"],"m":["father"],"s":4,"f":646},{"k":"雨","on":["ウ"],"kun":["あめ","あま"],"m":["rain"],"s":8,"f":950}],"N4":[{"k":"会","on":["カイ","エ"],"kun":["あ(う)","あ(わせる)"],"m":["meeting","meet","party"],"s":6,"f":4},{"k":"同","on":["ドウ"],"kun":["おな(じ)"],"m":["same","agree","equal"],"s":6,"f":15},{"k":"事","on":["ジ","ズ"],"kun":["こと","つか(う)"],"m":["matter","thing","fact"],"s":8,"f":18},{"k":"自","on":["ジ","シ"],"kun":["みずか(ら)","おの(ずから)"],"m":["oneself"],"s":6,"f":19},{"k":"社","on":["シャ"],"kun":["やしろ"],"m":["company","firm","office"],"s":7,"f":21},{"k":"発","on":["ハツ","ホツ"],"kun":["た(つ)","あば(く)"],"m":["departure","discharge","publish"],"s":9,"f":32},{"k":"者","on":["シャ"],"kun":["もの"],"m":["someone","person"],"s":8,"f":38},{"k":"地","on":["チ","ジ"],"kun":[],"m":["ground","earth"],"s":6,"f":40},{"k":"業","on":["ギョウ","ゴウ"],"kun":["わざ"],"m":["business","vocation","arts"],"s":13,"f":43},{"k":"方","on":["ホウ"],"kun":["かた"],"m":["direction","person","alternative"],"s":4,"f":46},{"k":"新","on":["シン"],"kun":["あたら(しい)","あら(た)"],"m":["new"],"s":13,"f":51},{"k":"場","on":["ジョウ","チョウ"],"kun":["ば"],"m":["location","place"],"s":12,"f":52},{"k":"員","on":["イン"],"kun":[],"m":["employee","member","number"],"s":10,"f":54},{"k":"立","on":["リツ","リュウ"],"kun":["た(つ)","た(ち)"],"m":["stand up","rise","set up"],"s":5,"f":58},{"k":"開","on":["カイ"],"kun":["ひら(く)","ひら(き)"],"m":["open","unfold","unseal"],"s":12,"f":59},{"k":"手","on":["シュ","ズ"],"kun":["て","て"],"m":["hand"],"s":4,"f":60},{"k":"力","on":["リョク","リキ"],"kun":["ちから"],"m":["power","strength","strong"],"s":2,"f":62},{"k":"問","on":["モン"],"kun":["と(う)","と(い)"],"m":["question","ask","problem"],"s":11,"f":64},{"k":"代","on":["ダイ","タイ"],"kun":["か(わる)","かわ(る)"],"m":["substitute","change","convert"],"s":5,"f":66},{"k":"明","on":["メイ","ミョウ"],"kun":["あ(かり)","あか(るい)"],"m":["bright","light"],"s":8,"f":67},{"k":"動","on":["ドウ"],"kun":["うご(く)","うご(かす)"],"m":["move","motion","change"],"s":11,"f":73},{"k":"京","on":["キョウ","ケイ"],"kun":["みやこ"],"m":["capital","10**16"],"s":8,"f":74},{"k":"目","on":["モク","ボク"],"kun":["め","ま"],"m":["eye","class","look"],"s":5,"f":76},{"k":"通","on":["ツウ","ツ"],"kun":["とお(る)","とお(り)"],"m":["traffic","pass through","avenue"],"s":10,"f":80},{"k":"言","on":["ゲン","ゴン"],"kun":["い(う)","こと"],"m":["say","word"],"s":7,"f":83},{"k":"理","on":["リ"],"kun":["ことわり"],"m":["logic","arrangement","reason"],"s":11,"f":86},{"k":"体","on":["タイ","テイ"],"kun":["からだ","かたち"],"m":["body","substance","object"],"s":7,"f":88},{"k":"田","on":["デン"],"kun":["た"],"m":["rice field","rice paddy"],"s":5,"f":90},{"k":"主","on":["シュ","ス"],"kun":["ぬし","おも"],"m":["lord","chief","master"],"s":5,"f":95},{"k":"題","on":["ダイ"],"kun":[],"m":["topic","subject"],"s":18,"f":96},{"k":"意","on":["イ"],"kun":[],"m":["idea","mind","heart"],"s":13,"f":99},{"k":"不","on":["フ","ブ"],"kun":[],"m":["negative","non-","bad"],"s":4,"f":101},{"k":"作","on":["サク","サ"],"kun":["つく(る)","つく(り)"],"m":["make","production","prepare"],"s":7,"f":103},{"k":"用","on":["ヨウ"],"kun":["もち(いる)"],"m":["utilize","business","service"],"s":5,"f":107},{"k":"度","on":["ド","ト"],"kun":["たび"],"m":["degrees","occurrence","time"],"s":9,"f":110},{"k":"強","on":["キョウ","ゴウ"],"kun":["つよ(い)","つよ(まる)"],"m":["strong"],"s":11,"f":112},{"k":"公","on":["コウ","ク"],"kun":["おおやけ"],"m":["public","prince","official"],"s":4,"f":118},{"k":"持","on":["ジ"],"kun":["も(つ)","も(てる)"],"m":["hold","have"],"s":9,"f":119},{"k":"野","on":["ヤ","ショ"],"kun":["の","の"],"m":["plains","field","rustic"],"s":11,"f":120},{"k":"以","on":["イ"],"kun":["もっ(て)"],"m":["by means of","because","in view of"],"s":5,"f":126},{"k":"思","on":["シ"],"kun":["おも(う)","おもえら(く)"],"m":["think"],"s":9,"f":132},{"k":"家","on":["カ","ケ"],"kun":["いえ","や"],"m":["house","home","family"],"s":10,"f":133},{"k":"世","on":["セイ","セ"],"kun":["よ"],"m":["generation","world","society"],"s":5,"f":135},{"k":"多","on":["タ"],"kun":["おお(い)","まさ(に)"],"m":["many","frequent","much"],"s":6,"f":139},{"k":"正","on":["セイ","ショウ"],"kun":["ただ(しい)","ただ(す)"],"m":["correct","justice","righteous"],"s":5,"f":143},{"k":"安","on":["アン"],"kun":["やす(い)","やす(まる)"],"m":["relax","cheap","low"],"s":6,"f":144},{"k":"院","on":["イン"],"kun":[],"m":["Inst.","institution","temple"],"s":10,"f":150},{"k":"心","on":["シン"],"kun":["こころ"],"m":["heart","mind","spirit"],"s":4,"f":157},{"k":"界","on":["カイ"],"kun":[],"m":["world","boundary"],"s":9,"f":158},{"k":"教","on":["キョウ"],"kun":["おし(える)","おそ(わる)"],"m":["teach","faith","doctrine"],"s":11,"f":166},{"k":"文","on":["ブン","モン"],"kun":["ふみ","あや"],"m":["sentence","literature","style"],"s":4,"f":190},{"k":"元","on":["ゲン","ガン"],"kun":["もと"],"m":["beginning","former time","origin"],"s":4,"f":192},{"k":"重","on":["ジュウ","チョウ"],"kun":["え","おも(い)"],"m":["heavy","important","esteem"],"s":9,"f":193},{"k":"近","on":["キン","コン"],"kun":["ちか(い)"],"m":["near","early","akin"],"s":7,"f":194},{"k":"考","on":["コウ"],"kun":["かんが(える)","かんが(え)"],"m":["consider","think over"],"s":6,"f":196},{"k":"画","on":["ガ","カク"],"kun":["えが(く)","かく(する)"],"m":["brush-stroke","picture"],"s":8,"f":199},{"k":"海","on":["カイ"],"kun":["うみ"],"m":["sea","ocean"],"s":9,"f":200},{"k":"売","on":["バイ"],"kun":["う(る)","う(れる)"],"m":["sell"],"s":7,"f":202},{"k":"知","on":["チ"],"kun":["し(る)","し(らせる)"],"m":["know","wisdom"],"s":8,"f":205},{"k":"道","on":["ドウ","トウ"],"kun":["みち","いう"],"m":["road-way","street","district"],"s":12,"f":207},{"k":"集","on":["シュウ"],"kun":["あつ(まる)","あつ(める)"],"m":["gather","meet","congregate"],"s":12,"f":210},{"k":"別","on":["ベツ"],"kun":["わか(れる)","わ(ける)"],"m":["separate","branch off","diverge"],"s":7,"f":214},{"k":"物","on":["ブツ","モツ"],"kun":["もの","もの"],"m":["thing","object","matter"],"s":8,"f":215},{"k":"使","on":["シ"],"kun":["つか(う)","つか(い)"],"m":["use","send on a mission","order"],"s":8,"f":219},{"k":"品","on":["ヒン","ホン"],"kun":["しな"],"m":["goods","refinement","dignity"],"s":9,"f":225},{"k":"計","on":["ケイ"],"kun":["はか(る)","はか(らう)"],"m":["plot","plan","scheme"],"s":9,"f":228},{"k":"死","on":["シ"],"kun":["し(ぬ)","し(に)"],"m":["death","die"],"s":6,"f":229},{"k":"特","on":["トク"],"kun":[],"m":["special"],"s":10,"f":234},{"k":"私","on":["シ"],"kun":["わたくし","わたし"],"m":["private","I","me"],"s":7,"f":242},{"k":"始","on":["シ"],"kun":["はじ(める)","はじ(まる)"],"m":["commence","begin"],"s":8,"f":244},{"k":"朝","on":["チョウ"],"kun":["あさ"],"m":["morning","dynasty","regime"],"s":12,"f":248},{"k":"運","on":["ウン"],"kun":["はこ(ぶ)"],"m":["carry","luck","destiny"],"s":12,"f":255},{"k":"終","on":["シュウ"],"kun":["お(わる)","おわ(る)"],"m":["end","finish"],"s":11,"f":256},{"k":"台","on":["ダイ","タイ"],"kun":["うてな","われ"],"m":["pedestal","a stand","counter for machines and vehicles"],"s":5,"f":262},{"k":"広","on":["コウ"],"kun":["ひろ(い)","ひろ(まる)"],"m":["wide","broad","spacious"],"s":5,"f":263},{"k":"住","on":["ジュウ","ヂュウ"],"kun":["す(む)","す(まう)"],"m":["dwell","reside","live"],"s":7,"f":270},{"k":"真","on":["シン"],"kun":["ま","ま"],"m":["true","reality","Buddhist sect"],"s":10,"f":279},{"k":"有","on":["ユウ","ウ"],"kun":["あ(る)"],"m":["possess","have","exist"],"s":6,"f":282},{"k":"口","on":["コウ","ク"],"kun":["くち"],"m":["mouth"],"s":3,"f":284},{"k":"少","on":["ショウ"],"kun":["すく(ない)","すこ(し)"],"m":["few","little"],"s":4,"f":287},{"k":"町","on":["チョウ"],"kun":["まち"],"m":["town","village","block"],"s":7,"f":292},{"k":"料","on":["リョウ"],"kun":[],"m":["fee","materials"],"s":10,"f":295},{"k":"工","on":["コウ","ク"],"kun":[],"m":["craft","construction"],"s":3,"f":299},{"k":"建","on":["ケン","コン"],"kun":["た(てる)","た(て)"],"m":["build"],"s":9,"f":300},{"k":"空","on":["クウ"],"kun":["そら","あ(く)"],"m":["empty","sky","void"],"s":8,"f":304},{"k":"急","on":["キュウ"],"kun":["いそ(ぐ)","いそ(ぎ)"],"m":["hurry","emergency","sudden"],"s":9,"f":309},{"k":"止","on":["シ"],"kun":["と(まる)","と(める)"],"m":["stop","halt"],"s":4,"f":310},{"k":"送","on":["ソウ"],"kun":["おく(る)"],"m":["escort","send"],"s":9,"f":311},{"k":"切","on":["セツ","サイ"],"kun":["き(る)","き(り)"],"m":["cut","cutoff","be sharp"],"s":4,"f":324},{"k":"転","on":["テン"],"kun":["ころ(がる)","ころ(げる)"],"m":["revolve","turn around","change"],"s":11,"f":327},{"k":"研","on":["ケン"],"kun":["と(ぐ)"],"m":["polish","study of","sharpen"],"s":9,"f":336},{"k":"足","on":["ソク"],"kun":["あし","た(りる)"],"m":["leg","foot","be sufficient"],"s":7,"f":343},{"k":"究","on":["キュウ","ク"],"kun":["きわ(める)"],"m":["research","study"],"s":7,"f":368},{"k":"楽","on":["ガク","ラク"],"kun":["たの(しい)","たの(しむ)"],"m":["music","comfort","ease"],"s":13,"f":373},{"k":"起","on":["キ"],"kun":["お(きる)","お(こる)"],"m":["rouse","wake up","get up"],"s":10,"f":374},{"k":"着","on":["チャク","ジャク"],"kun":["き(る)","き(せる)"],"m":["don","arrive","wear"],"s":12,"f":376},{"k":"店","on":["テン"],"kun":["みせ","たな"],"m":["store","shop"],"s":8,"f":378},{"k":"病","on":["ビョウ","ヘイ"],"kun":["や(む)","やまい"],"m":["ill","sick"],"s":10,"f":384},{"k":"質","on":["シツ","シチ"],"kun":["たち","ただ(す)"],"m":["substance","quality","matter"],"s":15,"f":389},{"k":"待","on":["タイ"],"kun":["ま(つ)"],"m":["wait","depend on"],"s":9,"f":391},{"k":"試","on":["シ"],"kun":["こころ(みる)","ため(す)"],"m":["test","try","attempt"],"s":13,"f":392},{"k":"族","on":["ゾク"],"kun":[],"m":["tribe","family"],"s":11,"f":393},{"k":"銀","on":["ギン"],"kun":["しろがね"],"m":["silver"],"s":14,"f":395},{"k":"早","on":["ソウ","サッ"],"kun":["はや(い)","はや"],"m":["early","fast"],"s":6,"f":402},{"k":"映","on":["エイ"],"kun":["うつ(る)","うつ(す)"],"m":["reflect","reflection","projection"],"s":9,"f":404},{"k":"親","on":["シン"],"kun":["おや","おや"],"m":["parent","intimacy","relative"],"s":16,"f":406},{"k":"験","on":["ケン","ゲン"],"kun":["あかし","しるし"],"m":["verification","effect","testing"],"s":18,"f":410},{"k":"英","on":["エイ"],"kun":["はなぶさ"],"m":["England","English","hero"],"s":8,"f":430},{"k":"医","on":["イ"],"kun":["い(やす)","い(する)"],"m":["doctor","medicine"],"s":7,"f":437},{"k":"仕","on":["シ","ジ"],"kun":["つか(える)"],"m":["attend","doing","official"],"s":5,"f":439},{"k":"去","on":["キョ","コ"],"kun":["さ(る)"],"m":["gone","past","quit"],"s":5,"f":440},{"k":"味","on":["ミ"],"kun":["あじ","あじ(わう)"],"m":["flavor","taste"],"s":8,"f":442},{"k":"写","on":["シャ","ジャ"],"kun":["うつ(す)","うつ(る)"],"m":["copy","be photographed","describe"],"s":5,"f":453},{"k":"字","on":["ジ"],"kun":["あざ","あざな"],"m":["character","letter","word"],"s":6,"f":485},{"k":"答","on":["トウ"],"kun":["こた(える)","こた(え)"],"m":["solution","answer"],"s":12,"f":486},{"k":"夜","on":["ヤ"],"kun":["よ","よる"],"m":["night","evening"],"s":8,"f":487},{"k":"音","on":["オン","イン"],"kun":["おと","ね"],"m":["sound","noise"],"s":9,"f":491},{"k":"注","on":["チュウ"],"kun":["そそ(ぐ)","さ(す)"],"m":["pour","irrigate","shed (tears)"],"s":8,"f":497},{"k":"帰","on":["キ"],"kun":["かえ(る)","かえ(す)"],"m":["homecoming","arrive at","lead to"],"s":10,"f":504},{"k":"古","on":["コ"],"kun":["ふる(い)","ふる"],"m":["old"],"s":5,"f":509},{"k":"歌","on":["カ"],"kun":["うた","うた(う)"],"m":["song","sing"],"s":14,"f":519},{"k":"買","on":["バイ"],"kun":["か(う)"],"m":["buy"],"s":12,"f":520},{"k":"悪","on":["アク","オ"],"kun":["わる(い)","わる"],"m":["bad","vice","rascal"],"s":11,"f":530},{"k":"図","on":["ズ","ト"],"kun":["え","はか(る)"],"m":["map","drawing","plan"],"s":7,"f":539},{"k":"週","on":["シュウ"],"kun":[],"m":["week"],"s":11,"f":540},{"k":"室","on":["シツ"],"kun":["むろ"],"m":["room","apartment","chamber"],"s":9,"f":550},{"k":"歩","on":["ホ","ブ"],"kun":["ある(く)","あゆ(む)"],"m":["walk","counter for steps"],"s":8,"f":554},{"k":"風","on":["フウ","フ"],"kun":["かぜ","かざ"],"m":["wind","air","style"],"s":9,"f":558},{"k":"紙","on":["シ"],"kun":["かみ"],"m":["paper"],"s":10,"f":559},{"k":"黒","on":["コク"],"kun":["くろ","くろ(ずむ)"],"m":["black"],"s":11,"f":573},{"k":"花","on":["カ","ケ"],"kun":["はな"],"m":["flower"],"s":7,"f":578},{"k":"春","on":["シュン"],"kun":["はる"],"m":["springtime","spring (season)"],"s":9,"f":579},{"k":"赤","on":["セキ","シャク"],"kun":["あか","あか"],"m":["red"],"s":7,"f":584},{"k":"青","on":["セイ","ショウ"],"kun":["あお","あお"],"m":["blue","green"],"s":8,"f":589},{"k":"館","on":["カン"],"kun":["やかた","たて"],"m":["building","mansion","large building"],"s":16,"f":613},{"k":"屋","on":["オク"],"kun":["や"],"m":["roof","house","shop"],"s":9,"f":616},{"k":"色","on":["ショク","シキ"],"kun":["いろ"],"m":["color"],"s":6,"f":621},{"k":"走","on":["ソウ"],"kun":["はし(る)"],"m":["run"],"s":7,"f":626},{"k":"秋","on":["シュウ"],"kun":["あき","とき"],"m":["autumn"],"s":9,"f":635},{"k":"夏","on":["カ","ガ"],"kun":["なつ"],"m":["summer"],"s":10,"f":659},{"k":"習","on":["シュウ","ジュ"],"kun":["なら(う)","なら(い)"],"m":["learn"],"s":11,"f":706},{"k":"駅","on":["エキ"],"kun":[],"m":["station"],"s":14,"f":724},{"k":"洋","on":["ヨウ"],"kun":[],"m":["ocean","sea","foreign"],"s":9,"f":763},{"k":"旅","on":["リョ"],"kun":["たび"],"m":["trip","travel"],"s":10,"f":783},{"k":"服","on":["フク"],"kun":[],"m":["clothing","admit","obey"],"s":8,"f":873},{"k":"夕","on":["セキ"],"kun":["ゆう"],"m":["evening"],"s":3,"f":924},{"k":"借","on":["シャク"],"kun":["か(りる)"],"m":["borrow","rent"],"s":10,"f":932},{"k":"曜","on":["ヨウ"],"kun":[],"m":["weekday"],"s":18,"f":940},{"k":"飲","on":["イン","オン"],"kun":["の(む)"],"m":["drink","smoke","take"],"s":12,"f":969},{"k":"肉","on":["ニク"],"kun":["しし"],"m":["meat"],"s":6,"f":986},{"k":"貸","on":["タイ"],"kun":["か(す)","か(し)"],"m":["lend"],"s":12,"f":995},{"k":"堂","on":["ドウ"],"kun":[],"m":["public chamber","hall"],"s":11,"f":1010},{"k":"鳥","on":["チョウ"],"kun":["とり"],"m":["bird","chicken"],"s":11,"f":1043},{"k":"飯","on":["ハン"],"kun":["めし"],"m":["meal","boiled rice"],"s":12,"f":1046},{"k":"勉","on":["ベン"],"kun":["つと(める)"],"m":["exertion","endeavour","encourage"],"s":10,"f":1066},{"k":"冬","on":["トウ"],"kun":["ふゆ"],"m":["winter"],"s":5,"f":1090},{"k":"昼","on":["チュウ"],"kun":["ひる"],"m":["daytime","noon"],"s":9,"f":1115},{"k":"茶","on":["チャ","サ"],"kun":[],"m":["tea"],"s":9,"f":1116},{"k":"弟","on":["テイ","ダイ"],"kun":["おとうと"],"m":["younger brother","faithful service to elders"],"s":7,"f":1161},{"k":"牛","on":["ギュウ"],"kun":["うし"],"m":["cow"],"s":4,"f":1202},{"k":"魚","on":["ギョ"],"kun":["うお","さかな"],"m":["fish"],"s":11,"f":1208},{"k":"兄","on":["ケイ","キョウ"],"kun":["あに"],"m":["elder brother","big brother"],"s":5,"f":1219},{"k":"犬","on":["ケン"],"kun":["いぬ","いぬ"],"m":["dog"],"s":4,"f":1326},{"k":"妹","on":["マイ"],"kun":["いもうと"],"m":["younger sister"],"s":8,"f":1446},{"k":"姉","on":["シ"],"kun":["あね","はは"],"m":["elder sister"],"s":8,"f":1473},{"k":"漢","on":["カン"],"kun":[],"m":["Sino-","China"],"s":13,"f":1487}]};
+  root.KanjiSets = KANJI_SETS;
+  if (typeof module !== 'undefined' && module.exports) module.exports = KANJI_SETS;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Kanji Crawl: 漢字に答えて戦うローグライトのルール（画面に依存しない純粋なロジック）。
+// ブラウザでは globalThis.KanjiCrawl、Node では module.exports で使う。
+(function (root) {
+  'use strict';
+
+  function rng(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+  function shuffle(r, arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
+  // ---- 構成 ----
+  const FLOORS = 3;
+  const BATTLES_PER_FLOOR = 3; // 各階: 戦闘3回 → ボス
+  const BASE_TIME = 9000; // 1問の制限時間(ms)
+  const FAST = 3000; // これより速いと会心
+
+  const ENEMIES = [
+    { name: 'Kappa', icon: '🐢', hp: 32, atk: 12 },
+    { name: 'Tanuki', icon: '🦝', hp: 36, atk: 13 },
+    { name: 'Kitsune', icon: '🦊', hp: 40, atk: 14 },
+    { name: 'Tengu', icon: '👺', hp: 44, atk: 15 },
+    { name: 'Yurei', icon: '👻', hp: 42, atk: 17 },
+    { name: 'Oni', icon: '👹', hp: 50, atk: 18 },
+  ];
+  const BOSSES = [
+    { name: 'Stone Golem of Strokes', icon: '🗿', hp: 100, atk: 18 },
+    { name: 'Daruma of Doubt', icon: '🎎', hp: 140, atk: 22 },
+    { name: 'Dragon of the Lost Readings', icon: '🐉', hp: 190, atk: 26 },
+  ];
+
+  // 報酬（遺物）。apply はランの状態を書き換える
+  const RELICS = {
+    sharpen: { name: 'Whetstone', icon: '🗡️', desc: '+4 damage on every hit', apply: (g) => { g.dmg += 4; } },
+    vitality: { name: 'Rice Ball', icon: '🍙', desc: '+20 max HP and heal 20', apply: (g) => { g.maxHp += 20; g.hp = Math.min(g.maxHp, g.hp + 20); } },
+    potion: { name: 'Green Tea', icon: '🍵', desc: 'Heal 45 HP', repeat: true, apply: (g) => { g.hp = Math.min(g.maxHp, g.hp + 45); } },
+    focus: { name: 'Incense', icon: '🕯️', desc: '+3 seconds to answer', apply: (g) => { g.timeLimit += 3000; } },
+    insight: { name: 'Lantern', icon: '🏮', desc: '3 hints: remove two wrong choices', repeat: true, apply: (g) => { g.hints += 3; } },
+    keeper: { name: 'Omamori', icon: '🧧', desc: 'The first miss in each battle keeps your combo', apply: (g) => { g.flags.keeper = true; } },
+    vampire: { name: 'Bat Fan', icon: '🪭', desc: 'Heal 3 HP on every correct answer', apply: (g) => { g.flags.vampire = true; } },
+    scholar: { name: 'Brush', icon: '🖌️', desc: 'Reading questions deal +60% damage', apply: (g) => { g.flags.scholar = true; } },
+    shield: { name: 'Kabuto', icon: '⛑️', desc: 'Take 35% less damage', apply: (g) => { g.flags.shield = true; } },
+  };
+
+  // ---- 習熟度（間隔反復の箱 0〜5）。ランをまたいで保存する ----
+  function masteryOf(store, k) { return store[k] || { box: 0, seen: 0, ok: 0, ng: 0 }; }
+  function bump(store, k, ok) {
+    const m = Object.assign({}, masteryOf(store, k));
+    m.seen++;
+    if (ok) { m.ok++; m.box = Math.min(5, m.box + 1); } else { m.ng++; m.box = Math.max(0, m.box - 2); }
+    store[k] = m;
+    return m;
+  }
+  // 箱が低い字ほど出やすい
+  function weightOf(store, k) { const m = masteryOf(store, k); return (6 - m.box) * (6 - m.box) + (m.seen === 0 ? 4 : 0); }
+  function weightedPick(r, pool, store, exclude) {
+    const c = pool.filter((e) => !exclude.has(e.k));
+    const list = c.length ? c : pool;
+    let total = 0;
+    for (const e of list) total += weightOf(store, e.k);
+    let x = r() * total;
+    for (const e of list) { x -= weightOf(store, e.k); if (x <= 0) return e; }
+    return list[list.length - 1];
+  }
+  // 苦手な字（ボス用）: 箱が低く、間違いが多い順
+  function weakest(pool, store, n) {
+    return pool.slice().sort((a, b) => {
+      const ma = masteryOf(store, a.k), mb = masteryOf(store, b.k);
+      return (ma.box - mb.box) || (mb.ng - ma.ng) || (a.f - b.f);
+    }).slice(0, n);
+  }
+
+  // ---- 問題 ----
+  const reading = (e) => [e.on[0], e.kun[0]].filter(Boolean).join(' / ');
+  const meaning = (e) => e.m.slice(0, 2).join(', ');
+  function makeQuestion(g, e) {
+    const r = g.r;
+    // 1階は意味、2階から読み、3階から逆引き（意味→漢字）も混ぜる
+    const modes = ['meaning'];
+    if (g.floor >= 2) modes.push('reading');
+    if (g.floor >= 3) modes.push('reverse');
+    const mode = pick(r, modes);
+    const show = mode === 'reverse' ? meaning(e) : e.k;
+    const ans = mode === 'meaning' ? meaning(e) : mode === 'reading' ? reading(e) : e.k;
+    const label = (x) => (mode === 'meaning' ? meaning(x) : mode === 'reading' ? reading(x) : x.k);
+    const others = shuffle(r, g.pool.filter((x) => x.k !== e.k && label(x) !== ans)).slice(0, 3).map(label);
+    const options = shuffle(r, [ans, ...others]);
+    return { kanji: e, mode, prompt: show, options, answer: options.indexOf(ans), removed: [] };
+  }
+
+  // ---- ラン ----
+  function newRun(opts) {
+    const seed = opts.seed >>> 0;
+    const g = {
+      seed, r: rng(seed), pool: opts.pool, mastery: opts.mastery || {},
+      floor: 1, battle: 0, phase: 'battle', // battle | reward | won | lost
+      hp: 100, maxHp: 100, dmg: 10, timeLimit: BASE_TIME, hints: 1, combo: 0, bestCombo: 0,
+      flags: {}, relics: [], enemy: null, q: null, keeperUsed: false,
+      stats: { correct: 0, wrong: 0, crits: 0, learned: new Set(), missed: new Map() },
+      rewardChoices: [], lastHit: null, recent: new Set(),
+    };
+    spawn(g);
+    return g;
+  }
+  function isBoss(g) { return g.battle === BATTLES_PER_FLOOR; }
+  function spawn(g) {
+    const scale = 1 + (g.floor - 1) * 0.35;
+    const base = isBoss(g) ? BOSSES[g.floor - 1] : pick(g.r, ENEMIES);
+    g.enemy = { name: base.name, icon: base.icon, boss: isBoss(g), maxHp: Math.round(base.hp * scale), hp: Math.round(base.hp * scale), atk: Math.round(base.atk * (isBoss(g) ? 1 : scale)) };
+    g.keeperUsed = false;
+    g.bossQueue = isBoss(g) ? weakest(g.pool, g.mastery, 8).map((e) => e.k) : null;
+    nextQuestion(g);
+  }
+  function nextQuestion(g) {
+    let e;
+    if (g.bossQueue && g.bossQueue.length) {
+      const k = g.bossQueue.shift();
+      e = g.pool.find((x) => x.k === k);
+    } else {
+      e = weightedPick(g.r, g.pool, g.mastery, g.recent);
+    }
+    g.recent.add(e.k);
+    if (g.recent.size > 6) g.recent.delete(g.recent.values().next().value);
+    g.q = makeQuestion(g, e);
+  }
+
+  // 答える。choice = -1 は時間切れ。戻り値は演出用の結果
+  function answer(g, choice, elapsedMs) {
+    if (g.phase !== 'battle') return null;
+    const q = g.q;
+    const ok = choice === q.answer && elapsedMs <= g.timeLimit;
+    const m = bump(g.mastery, q.kanji.k, ok);
+    const res = { ok, correct: q.options[q.answer], kanji: q.kanji, mode: q.mode, box: m.box };
+    if (ok) {
+      g.stats.correct++;
+      if (m.box >= 3) g.stats.learned.add(q.kanji.k);
+      g.combo++;
+      g.bestCombo = Math.max(g.bestCombo, g.combo);
+      let dmg = g.dmg + Math.min(g.combo - 1, 10) * 2;
+      if (q.mode === 'reading' && g.flags.scholar) dmg = Math.round(dmg * 1.6);
+      const crit = elapsedMs <= FAST;
+      if (crit) { dmg = Math.round(dmg * 1.5); g.stats.crits++; }
+      g.enemy.hp = Math.max(0, g.enemy.hp - dmg);
+      if (g.flags.vampire) g.hp = Math.min(g.maxHp, g.hp + 3);
+      Object.assign(res, { dmg, crit });
+    } else {
+      g.stats.wrong++;
+      g.stats.missed.set(q.kanji.k, q.kanji);
+      if (g.flags.keeper && !g.keeperUsed) g.keeperUsed = true; else g.combo = 0;
+      let hit = g.enemy.atk;
+      if (g.flags.shield) hit = Math.round(hit * 0.65);
+      g.hp = Math.max(0, g.hp - hit);
+      Object.assign(res, { taken: hit, timeout: choice === -1 });
+    }
+    if (g.hp <= 0) { g.phase = 'lost'; return res; }
+    if (g.enemy.hp <= 0) {
+      res.defeated = true;
+      if (isBoss(g)) {
+        if (g.floor >= FLOORS) { g.phase = 'won'; return res; }
+        g.floor++; g.battle = 0;
+        g.hp = Math.min(g.maxHp, g.hp + Math.round(g.maxHp * 0.3));
+        res.floorCleared = true;
+        spawn(g);
+      } else {
+        g.battle++;
+        g.phase = 'reward';
+        g.rewardChoices = rollRewards(g);
+      }
+      return res;
+    }
+    nextQuestion(g);
+    return res;
+  }
+  function rollRewards(g) {
+    const keys = Object.keys(RELICS).filter((k) => RELICS[k].repeat || !g.relics.includes(k));
+    return shuffle(g.r, keys).slice(0, 3);
+  }
+  function chooseReward(g, key) {
+    if (g.phase !== 'reward' || !g.rewardChoices.includes(key)) return false;
+    RELICS[key].apply(g);
+    if (!RELICS[key].repeat) g.relics.push(key);
+    g.phase = 'battle';
+    g.rewardChoices = [];
+    spawn(g);
+    return true;
+  }
+  function useHint(g) {
+    if (g.phase !== 'battle' || g.hints <= 0 || g.q.removed.length) return false;
+    const wrong = g.q.options.map((_, i) => i).filter((i) => i !== g.q.answer);
+    g.q.removed = shuffle(g.r, wrong).slice(0, 2);
+    g.hints--;
+    return true;
+  }
+  function summary(g) {
+    const total = g.stats.correct + g.stats.wrong;
+    return {
+      result: g.phase, floor: g.floor, correct: g.stats.correct, wrong: g.stats.wrong,
+      accuracy: total ? Math.round((g.stats.correct / total) * 100) : 0,
+      bestCombo: g.bestCombo, crits: g.stats.crits, relics: g.relics.slice(),
+      missed: [...g.stats.missed.values()], learned: [...g.stats.learned],
+      score: (g.floor - 1) * 1000 + g.battle * 250 + g.stats.correct * 10 + g.bestCombo * 5 + (g.phase === 'won' ? 2000 : 0),
+    };
+  }
+  function masteredCount(pool, store) { return pool.filter((e) => masteryOf(store, e.k).box >= 3).length; }
+
+  const api = { rng, FLOORS, BATTLES_PER_FLOOR, BASE_TIME, FAST, ENEMIES, BOSSES, RELICS, masteryOf, bump, weakest, reading, meaning, newRun, answer, chooseReward, useHint, summary, masteredCount, isBoss };
+  root.KanjiCrawl = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+(function () {
+  'use strict';
+  const G = window.KanjiCrawl, SETS = window.KanjiSets;
+  const $ = (id) => document.getElementById(id);
+  const POOL = SETS.N5;
+  const qs = new URLSearchParams(location.search);
+  const FAST_MODE = qs.has('fast'); // 検証用: 演出の待ち時間を短くする
+
+  const store = {
+    get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 保存できなくても遊べる */ } },
+  };
+  const mastery = store.get('kc-mastery', {});
+  const meta = store.get('kc-meta', { best: 0, runs: 0 });
+
+  let g = null, qStart = 0, timer = 0, locked = false;
+  const SCREENS = ['scrTitle', 'scrBattle', 'scrReward', 'scrEnd', 'scrGrim'];
+  function show(id) { for (const s of SCREENS) $(s).hidden = s !== id; window.scrollTo(0, 0); }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function renderTitle() {
+    $('stMastered').textContent = `${G.masteredCount(POOL, mastery)}/${POOL.length}`;
+    $('stBest').textContent = meta.best;
+    $('stRuns').textContent = meta.runs;
+    show('scrTitle');
+  }
+
+  function startRun() {
+    const seed = qs.has('seed') ? +qs.get('seed') : Math.floor(Math.random() * 2 ** 32);
+    g = G.newRun({ seed, pool: POOL, mastery });
+    meta.runs++;
+    store.set('kc-meta', meta);
+    show('scrBattle');
+    renderBattle(true);
+  }
+
+  const MODE_LABEL = { meaning: 'Meaning?', reading: 'Reading? (on / kun)', reverse: 'Which kanji?' };
+  function renderBattle(newQ) {
+    const e = g.enemy;
+    $('hudFloor').textContent = `Floor ${g.floor}`;
+    $('hudRoom').textContent = e.boss ? 'BOSS' : `Fight ${g.battle + 1}/${G.BATTLES_PER_FLOOR}`;
+    $('hudRelics').textContent = g.relics.map((k) => G.RELICS[k].icon).join('');
+    $('hudRelics').title = g.relics.map((k) => G.RELICS[k].name).join(', ');
+    $('barHp').style.width = `${(g.hp / g.maxHp) * 100}%`;
+    $('txtHp').textContent = `${g.hp}/${g.maxHp}`;
+    $('enemy').classList.toggle('boss', e.boss);
+    $('enIcon').textContent = e.icon;
+    $('enName').textContent = e.name;
+    $('barEhp').style.width = `${(e.hp / e.maxHp) * 100}%`;
+    $('combo').textContent = g.combo;
+    $('hints').textContent = g.hints;
+    $('btnHint').disabled = g.hints <= 0;
+    if (!newQ) return;
+    const q = g.q;
+    $('qLabel').textContent = MODE_LABEL[q.mode];
+    $('qPrompt').textContent = q.prompt;
+    $('qPrompt').classList.toggle('text', q.mode === 'reverse');
+    $('opts').innerHTML = q.options.map((o, i) => `<button class="opt${q.mode === 'reverse' ? ' kanji' : ''}" data-i="${i}" ${q.mode === 'reverse' ? 'lang="ja"' : ''}><span class="key">${i + 1}</span>${esc(o)}</button>`).join('');
+    $('feedback').innerHTML = '';
+    locked = false;
+    qStart = performance.now();
+    tick();
+  }
+  function tick() {
+    cancelAnimationFrame(timer);
+    const step = () => {
+      if (!g || g.phase !== 'battle' || locked) return;
+      const el = performance.now() - qStart;
+      $('barTime').style.width = `${Math.max(0, 1 - el / g.timeLimit) * 100}%`;
+      if (el >= g.timeLimit) { onAnswer(-1); return; }
+      timer = requestAnimationFrame(step);
+    };
+    timer = requestAnimationFrame(step);
+  }
+
+  function floatText(text, cls) {
+    const f = document.createElement('div');
+    f.className = 'float ' + cls;
+    f.textContent = text;
+    $('enemy').appendChild(f);
+    setTimeout(() => f.remove(), 800);
+  }
+  function retrigger(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  function onAnswer(i) {
+    if (locked || g.phase !== 'battle') return;
+    locked = true;
+    cancelAnimationFrame(timer);
+    const q = g.q;
+    const res = G.answer(g, i, performance.now() - qStart);
+    const btns = [...$('opts').children];
+    btns.forEach((b) => { b.disabled = true; });
+    btns[q.answer].classList.add('right');
+    if (i >= 0 && !res.ok) btns[i].classList.add('wrong');
+    const k = q.kanji;
+    const info = `<span lang="ja" style="font-size:1.3rem">${esc(k.k)}</span> ${esc(G.reading(k))} — ${esc(G.meaning(k))}`;
+    if (res.ok) {
+      $('feedback').innerHTML = `<span class="ok">${res.crit ? 'CRITICAL! ' : ''}-${res.dmg}</span> · ${info}`;
+      floatText(`-${res.dmg}`, res.crit ? 'crit' : 'dmg');
+      retrigger($('enIcon'), 'shake');
+    } else {
+      $('feedback').innerHTML = `<span class="ng">${res.timeout ? 'Too slow!' : 'Miss!'} You took ${res.taken}</span><br>${info}`;
+      retrigger(document.body, 'flash');
+    }
+    store.set('kc-mastery', mastery);
+    renderBattle(false);
+    const wait = FAST_MODE ? 30 : res.ok ? 650 : 1700;
+    setTimeout(() => after(res), wait);
+  }
+
+  function after(res) {
+    if (g.phase === 'won' || g.phase === 'lost') return endRun();
+    if (g.phase === 'reward') return showReward();
+    renderBattle(true);
+    if (res.floorCleared) $('feedback').innerHTML = `<b>Floor ${g.floor - 1} cleared!</b> You recover some HP.`;
+  }
+
+  function showReward() {
+    $('rwSub').textContent = `HP ${g.hp}/${g.maxHp} · Next: ${g.battle === G.BATTLES_PER_FLOOR ? 'the floor boss' : `fight ${g.battle + 1}`}`;
+    $('choices').innerHTML = g.rewardChoices.map((key) => {
+      const r = G.RELICS[key];
+      return `<button class="choice" data-key="${key}"><span class="ic">${r.icon}</span><b>${esc(r.name)}</b><small>${esc(r.desc)}</small></button>`;
+    }).join('');
+    show('scrReward');
+  }
+
+  function endRun() {
+    const s = G.summary(g);
+    meta.best = Math.max(meta.best, s.score);
+    store.set('kc-meta', meta);
+    store.set('kc-mastery', mastery);
+    $('endTitle').textContent = s.result === 'won' ? 'You cleared the crawl!' : `Defeated on floor ${s.floor}`;
+    $('endSub').textContent = s.result === 'won' ? 'All three bosses fell. Try again to master more kanji.' : 'Your kanji progress is saved. The bosses will test your weak spots next time.';
+    $('endScore').textContent = s.score;
+    $('endAcc').textContent = s.accuracy + '%';
+    $('endCombo').textContent = s.bestCombo;
+    $('endMastered').textContent = `${G.masteredCount(POOL, mastery)}/${POOL.length}`;
+    $('endMissedWrap').hidden = !s.missed.length;
+    $('endMissed').innerHTML = s.missed.map((k) => `<div><span class="k" lang="ja">${esc(k.k)}</span><span>${esc(G.reading(k))}</span><span class="muted">${esc(G.meaning(k))}</span></div>`).join('');
+    show('scrEnd');
+  }
+
+  function renderGrim() {
+    $('grim').innerHTML = POOL.map((e) => `<button class="gk" data-k="${esc(e.k)}" data-box="${G.masteryOf(mastery, e.k).box}" lang="ja" aria-label="${esc(e.k)}">${esc(e.k)}</button>`).join('');
+    $('ginfo').textContent = 'Tap a kanji to see it.';
+    show('scrGrim');
+  }
+
+  $('btnStart').addEventListener('click', startRun);
+  $('btnAgain').addEventListener('click', startRun);
+  $('btnHome').addEventListener('click', renderTitle);
+  $('btnHow').addEventListener('click', () => { $('how').hidden = !$('how').hidden; });
+  $('btnGrim').addEventListener('click', renderGrim);
+  $('btnGrimBack').addEventListener('click', renderTitle);
+  $('grim').addEventListener('click', (e) => {
+    const b = e.target.closest('.gk'); if (!b) return;
+    const k = POOL.find((x) => x.k === b.dataset.k), m = G.masteryOf(mastery, k.k);
+    $('ginfo').innerHTML = `<span lang="ja" style="font-size:2.2rem;float:left;margin-right:12px;line-height:1">${esc(k.k)}</span><b>${esc(G.meaning(k))}</b><br>On: ${esc(k.on.join('、') || '—')} · Kun: ${esc(k.kun.join('、') || '—')}<br><span class="muted">${k.s} strokes · seen ${m.seen} · correct ${m.ok} · box ${m.box}/5</span>`;
+  });
+  $('opts').addEventListener('click', (e) => { const b = e.target.closest('.opt'); if (b) onAnswer(+b.dataset.i); });
+  $('choices').addEventListener('click', (e) => {
+    const b = e.target.closest('.choice'); if (!b) return;
+    G.chooseReward(g, b.dataset.key);
+    show('scrBattle');
+    renderBattle(true);
+  });
+  $('btnHint').addEventListener('click', hint);
+  function hint() {
+    if (locked || !G.useHint(g)) return;
+    for (const i of g.q.removed) $('opts').children[i].classList.add('gone');
+    $('hints').textContent = g.hints;
+    $('btnHint').disabled = g.hints <= 0;
+  }
+  document.addEventListener('keydown', (e) => {
+    if ($('scrBattle').hidden) {
+      if (!$('scrReward').hidden && /^[1-3]$/.test(e.key)) { const b = $('choices').children[+e.key - 1]; if (b) b.click(); }
+      return;
+    }
+    if (/^[1-4]$/.test(e.key)) { const i = +e.key - 1; if (!g.q.removed.includes(i)) onAnswer(i); }
+    if (e.key === 'h' || e.key === 'H') hint();
+  });
+
+  if (qs.has('test')) window.__kc = { get game() { return g; } }; // 検証用
+  renderTitle();
+})();
+</script>
+</body>
+</html>
