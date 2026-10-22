@@ -50,6 +50,9 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .course button { min-height: 44px; min-width: 60px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
 .course button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 .course small { display: block; font-weight: 400; font-size: .7rem; opacity: .85; }
+.daily-info { font-size: .8rem; margin: 6px 0 0; }
+.share { margin: 12px 0; display: grid; gap: 8px; }
+.share textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--opt); color: var(--ink); }
 .upsell { font-size: .85rem; margin-top: 16px; text-align: left; }
 .stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
 .stat b { display: block; font-size: 1.3rem; }
@@ -137,6 +140,8 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     <p class="tag">Every attack is a kanji. Every boss is the kanji you keep missing.</p>
     <div class="course" id="course" role="radiogroup" aria-label="Kanji set" hidden></div>
     <button class="btn primary" id="btnStart" style="min-width:220px">Start a run</button>
+    <div><button class="btn" id="btnDaily" style="min-width:220px;margin-top:10px">📅 Daily dungeon</button></div>
+    <p class="muted daily-info" id="dailyInfo"></p>
     <div class="stats3">
       <div class="stat"><b id="stMastered">0/79</b>kanji mastered</div>
       <div class="stat"><b id="stBest">0</b>best score</div>
@@ -203,6 +208,11 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       <div><b id="endAcc">0%</b>accuracy</div>
       <div><b id="endCombo">0</b>best combo</div>
       <div><b id="endMastered">0</b>kanji mastered (all runs)</div>
+    </div>
+    <div class="panel share" id="endShare" hidden>
+      <b>Daily result</b> <span class="muted" id="shareNote"></span>
+      <textarea id="shareText" rows="3" readonly hidden aria-label="Result to share"></textarea>
+      <button class="btn" id="btnShare">Copy result</button>
     </div>
     <div id="endMissedWrap"><b>Review these</b><div class="missed" id="endMissed"></div></div>
     <div class="row">
@@ -319,7 +329,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   const reading = (e) => [e.on[0], e.kun[0]].filter(Boolean).join(' / ');
   const meaning = (e) => e.m.slice(0, 2).join(', ');
   function makeQuestion(g, e) {
-    const r = g.r;
+    const r = g.rq;
     // 1階は意味、2階から読み、3階から逆引き（意味→漢字）も混ぜる
     const modes = ['meaning'];
     if (g.floor >= 2) modes.push('reading');
@@ -344,7 +354,8 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   function newRun(opts) {
     const seed = opts.seed >>> 0;
     const g = {
-      seed, r: rng(seed), pool: opts.pool, mastery: opts.mastery || {},
+      // r: 敵と報酬（日替わりで全員共通）、rq: 出題（習熟度で人ごとに変わる）
+      seed, r: rng(seed), rq: rng(seed ^ 0x9e3779b9), pool: opts.pool, mastery: opts.mastery || {},
       floor: 1, battle: 0, phase: 'battle', // battle | reward | won | lost
       hp: 100, maxHp: 100, dmg: 10, timeLimit: BASE_TIME, hints: 1, combo: 0, bestCombo: 0,
       flags: {}, relics: [], enemy: null, q: null, keeperUsed: false,
@@ -369,7 +380,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
       const k = g.bossQueue.shift();
       e = g.pool.find((x) => x.k === k);
     } else {
-      e = weightedPick(g.r, g.pool, g.mastery, g.recent);
+      e = weightedPick(g.rq, g.pool, g.mastery, g.recent);
     }
     g.recent.add(e.k);
     if (g.recent.size > 6) g.recent.delete(g.recent.values().next().value);
@@ -445,7 +456,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   function useHint(g) {
     if (g.phase !== 'battle' || g.hints <= 0 || g.q.removed.length) return false;
     const wrong = g.q.options.map((_, i) => i).filter((i) => i !== g.q.answer);
-    g.q.removed = shuffle(g.r, wrong).slice(0, 2);
+    g.q.removed = shuffle(g.rq, wrong).slice(0, 2);
     g.hints--;
     return true;
   }
@@ -459,9 +470,15 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
       score: (g.floor - 1) * 1000 + g.battle * 250 + g.stats.correct * 10 + g.bestCombo * 5 + (g.phase === 'won' ? 2000 : 0),
     };
   }
+  // 日替わりダンジョンの種（UTCの日付 'YYYY-MM-DD' から決まる）
+  function dailySeed(date) {
+    let h = 2166136261;
+    for (const c of 'kanji-crawl-daily:' + date) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
   function masteredCount(pool, store) { return pool.filter((e) => masteryOf(store, e.k).box >= 3).length; }
 
-  const api = { rng, FLOORS, BATTLES_PER_FLOOR, BASE_TIME, FAST, ENEMIES, BOSSES, RELICS, INTENTS, masteryOf, bump, weakest, reading, meaning, newRun, answer, chooseReward, useHint, summary, masteredCount, isBoss };
+  const api = { rng, dailySeed, FLOORS, BATTLES_PER_FLOOR, BASE_TIME, FAST, ENEMIES, BOSSES, RELICS, INTENTS, masteryOf, bump, weakest, reading, meaning, newRun, answer, chooseReward, useHint, summary, masteredCount, isBoss };
   root.KanjiCrawl = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -498,6 +515,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   }
   function renderTitle() {
     renderCourse();
+    renderDaily();
     $('upsell').hidden = EDITION !== 'free';
     $('stMastered').textContent = `${G.masteredCount(POOL, mastery)}/${POOL.length}`;
     $('stBest').textContent = meta.bestBy[course] || 0;
@@ -505,8 +523,19 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     show('scrTitle');
   }
 
-  function startRun() {
-    const seed = qs.has('seed') ? +qs.get('seed') : Math.floor(Math.random() * 2 ** 32);
+  const TODAY = qs.get('date') || new Date().toISOString().slice(0, 10); // 日替わりはUTCの日付で切り替わる
+  const SHARE_URL = 'https://tatuyaochi-blip.github.io/kanji-crawl/';
+  let daily = false;
+  const dailyRec = () => { const d = (meta.dailyBy || {})[course]; return d && d.date === TODAY ? d : null; };
+  function renderDaily() {
+    const d = dailyRec();
+    $('dailyInfo').textContent = d
+      ? `Today's daily: ${d.result === 'won' ? 'cleared' : 'floor ' + d.floor} · ${d.score} pts. Replays are practice.`
+      : `Today's daily (${TODAY}): same dungeon for everyone. First try counts.`;
+  }
+  function startRun(isDaily) {
+    daily = !!isDaily;
+    const seed = daily ? G.dailySeed(`${TODAY}:${course}`) : qs.has('seed') ? +qs.get('seed') : Math.floor(Math.random() * 2 ** 32);
     g = G.newRun({ seed, pool: POOL, mastery });
     meta.runs++;
     store.set('kc-meta', meta);
@@ -517,7 +546,7 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
   const MODE_LABEL = { meaning: 'Meaning?', reading: 'Reading? (on / kun)', reverse: 'Which kanji?' };
   function renderBattle(newQ) {
     const e = g.enemy;
-    $('hudFloor').textContent = `Floor ${g.floor}`;
+    $('hudFloor').textContent = `${daily ? 'Daily · ' : ''}Floor ${g.floor}`;
     $('hudRoom').textContent = e.boss ? 'BOSS' : `Fight ${g.battle + 1}/${G.BATTLES_PER_FLOOR}`;
     $('hudRelics').textContent = g.relics.map((k) => G.RELICS[k].icon).join('');
     $('hudRelics').title = g.relics.map((k) => G.RELICS[k].name).join(', ');
@@ -613,8 +642,21 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     const s = G.summary(g);
     meta.best = Math.max(meta.best, s.score);
     meta.bestBy[course] = Math.max(meta.bestBy[course] || 0, s.score);
+    let counted = false;
+    if (daily && !dailyRec()) {
+      meta.dailyBy = meta.dailyBy || {};
+      meta.dailyBy[course] = { date: TODAY, score: s.score, floor: s.floor, result: s.result };
+      counted = true;
+    }
     store.set('kc-meta', meta);
     store.set('kc-mastery', mastery);
+    $('endShare').hidden = !daily;
+    if (daily) {
+      const d = dailyRec();
+      $('shareText').value = `Kanji Crawl Daily ${TODAY} (${course})\n${d.result === 'won' ? '🏯 Cleared all 3 floors' : `⚔️ Reached floor ${d.floor}`} · ${d.score} pts\n${SHARE_URL}`;
+      $('shareNote').textContent = counted ? 'Your first daily try is recorded.' : 'Practice run: your first try today is what counts.';
+      $('btnShare').textContent = 'Copy result';
+    }
     $('endTitle').textContent = s.result === 'won' ? 'You cleared the crawl!' : `Defeated on floor ${s.floor}`;
     $('endSub').textContent = s.result === 'won' ? 'All three bosses fell. Try again to master more kanji.' : 'Your kanji progress is saved. The bosses will test your weak spots next time.';
     $('endScore').textContent = s.score;
@@ -638,8 +680,17 @@ globalThis.KanjiSets = {"N5":[{"k":"日","on":["ニチ","ジツ"],"kun":["ひ"],
     meta.course = course; store.set('kc-meta', meta);
     renderTitle();
   });
-  $('btnStart').addEventListener('click', startRun);
-  $('btnAgain').addEventListener('click', startRun);
+  $('btnStart').addEventListener('click', () => startRun(false));
+  $('btnDaily').addEventListener('click', () => startRun(true));
+  $('btnAgain').addEventListener('click', () => startRun(false));
+  $('btnShare').addEventListener('click', async () => {
+    try {
+      // 埋め込み先によっては許可待ちのまま返らないので、1.5秒で手動コピーに切り替える
+      await Promise.race([navigator.clipboard.writeText($('shareText').value), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]);
+      $('btnShare').textContent = 'Copied!';
+    }
+    catch (e) { $('shareText').hidden = false; $('shareText').select(); $('btnShare').textContent = 'Select and copy the text'; }
+  });
   $('btnHome').addEventListener('click', renderTitle);
   $('btnHow').addEventListener('click', () => { $('how').hidden = !$('how').hidden; });
   $('btnGrim').addEventListener('click', renderGrim);
